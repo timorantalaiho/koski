@@ -10,10 +10,8 @@ import fi.oph.koski.localization.LocalizedString
 import fi.oph.koski.localization.LocalizedString.{finnish, sanitize}
 import fi.oph.koski.localization.LocalizedStringImplicits._
 import fi.oph.koski.log.Logging
-import fi.oph.koski.henkilo.HenkilöRepository
 import fi.oph.koski.oppilaitos.{MockOppilaitosRepository, OppilaitosRepository}
 import fi.oph.koski.schema._
-import fi.oph.koski.util.OptionalLists
 import fi.oph.koski.util.OptionalLists.optionalList
 
 import scala.xml.Node
@@ -46,7 +44,8 @@ case class VirtaXMLConverter(oppilaitosRepository: OppilaitosRepository, koodist
         tila = opiskeluoikeudenTila,
         ensisijaisuus = (opiskeluoikeusNode \ "Ensisijaisuus").headOption.map { e => // TODO, should this be a list ?
           Ensisijaisuus(alkuPvm(e), loppuPvm(e))
-        }
+        },
+        lukukausiIlmoittautumiset = lukukausiIlmottautumiset(opiskeluoikeusNode, virtaXml)
       )
 
       (muutSuoritukset, opiskeluoikeus :: opiskeluOikeudet)
@@ -137,6 +136,28 @@ case class VirtaXMLConverter(oppilaitosRepository: OppilaitosRepository, koodist
         None
     }
   }
+
+  private def lukukausiIlmottautumiset(opiskeluoikeusNode: Node, virtaXml: Node): Option[List[KorkeakoulunLukukausi_Ilmoittautuminen]] = {
+    val key = avain(opiskeluoikeusNode)
+    val ilmot = (virtaXml \\ "LukukausiIlmoittautumiset").toList
+      .filter(n => (n \ "@opiskeluoikeusAvain").text == key)
+      .map { n =>
+        KorkeakoulunLukukausi_Ilmoittautuminen(
+          tila = koodistoViitePalvelu.validate(Koodistokoodiviite((n \ "Tila").text, "virtalukukausiilmtila")).getOrElse(lukukausiIlmottautuminenPuuttuu),
+          myöntäjä = optionalOppilaitos(n),
+          ilmoittautumispäivä = date(n \ "IlmoittautumisPvm" text),
+          alkamispäivä = alkuPvm(n),
+          päättymispäivä = loppuPvm(n),
+          ylioppilaskunnanJäsen = (n \ "YlioppilaskuntaJasen").headOption.map(toBoolean),
+          ythsMaksettu = (n \ "YTHSMaksu").headOption.map(toBoolean)
+        )
+      }
+    optionalList(ilmot)
+  }
+
+  private val virtaTruths = List("1", "true")
+  private def toBoolean(n: Node) = virtaTruths.contains(n.text.toLowerCase)
+  private lazy val lukukausiIlmottautuminenPuuttuu = koodistoViitePalvelu.validateRequired(Koodistokoodiviite("4", "virtalukukausiilmtila"))
 
   private def convertOpintojaksonSuoritus(suoritus: Node, allNodes: List[Node]): KorkeakoulunOpintojaksonSuoritus = {
     val osasuoritukset = childNodes(suoritus, allNodes).map(convertOpintojaksonSuoritus(_, allNodes))

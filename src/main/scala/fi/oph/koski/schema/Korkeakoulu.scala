@@ -21,7 +21,8 @@ case class KorkeakoulunOpiskeluoikeus(
   suoritukset: List[KorkeakouluSuoritus],
   @KoodistoKoodiarvo("korkeakoulutus")
   tyyppi: Koodistokoodiviite = Koodistokoodiviite("korkeakoulutus", Some("Korkeakoulutus"), "opiskeluoikeudentyyppi", None),
-  synteettinen: Boolean = false
+  synteettinen: Boolean = false,
+  lukukausiIlmoittautumiset: Option[List[KorkeakoulunLukukausi_Ilmoittautuminen]] = None
 ) extends Opiskeluoikeus {
   override def versionumero = None
   override def lisätiedot = None
@@ -136,3 +137,14 @@ case class KorkeakoulunPaikallinenArviointi(
 ) extends PaikallinenArviointi with KorkeakoulunArviointi {
   override def arvioitsijat: Option[List[Arvioitsija]] = None
 }
+
+case class KorkeakoulunLukukausi_Ilmoittautuminen(
+  @KoodistoUri("virtalukukausiilmtila")
+  tila: Koodistokoodiviite,
+  myöntäjä: Option[Oppilaitos],
+  ilmoittautumispäivä: LocalDate,
+  alkamispäivä: LocalDate,
+  päättymispäivä: Option[LocalDate],
+  ylioppilaskunnanJäsen: Option[Boolean],
+  ythsMaksettu: Option[Boolean]
+)
