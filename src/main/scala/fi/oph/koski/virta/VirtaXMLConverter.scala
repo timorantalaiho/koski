@@ -44,11 +44,10 @@ case class VirtaXMLConverter(oppilaitosRepository: OppilaitosRepository, koodist
         tila = opiskeluoikeudenTila,
         ensisijaisuus = (opiskeluoikeusNode \ "Ensisijaisuus").headOption.map { e => // TODO, should this be a list ?
           Ensisijaisuus(alkuPvm(e), loppuPvm(e))
-        },
-        lukukausiIlmoittautumiset = lukukausiIlmottautumiset(opiskeluoikeusNode, virtaXml)
+        }
       )
 
-      (muutSuoritukset, opiskeluoikeus :: opiskeluOikeudet)
+      (muutSuoritukset, opiskeluoikeus.copy(lukukausiIlmoittautuminen = lukukausiIlmoittautuminen(opiskeluoikeus, virtaXml)) :: opiskeluOikeudet)
     }
 
     val orphanSuoritukset = orphans.flatMap(convertSuoritus(_, suoritusNodeList))
@@ -137,22 +136,46 @@ case class VirtaXMLConverter(oppilaitosRepository: OppilaitosRepository, koodist
     }
   }
 
-  private def lukukausiIlmottautumiset(opiskeluoikeusNode: Node, virtaXml: Node): Option[List[KorkeakoulunLukukausi_Ilmoittautuminen]] = {
-    val key = avain(opiskeluoikeusNode)
-    val ilmot = (virtaXml \\ "LukukausiIlmoittautumiset").toList
-      .filter(n => (n \ "@opiskeluoikeusAvain").text == key)
-      .map { n =>
-        KorkeakoulunLukukausi_Ilmoittautuminen(
-          tila = koodistoViitePalvelu.validate(Koodistokoodiviite((n \ "Tila").text, "virtalukukausiilmtila")).getOrElse(lukukausiIlmottautuminenPuuttuu),
-          myöntäjä = optionalOppilaitos(n),
-          ilmoittautumispäivä = date(n \ "IlmoittautumisPvm" text),
-          alkamispäivä = alkuPvm(n),
-          päättymispäivä = loppuPvm(n),
-          ylioppilaskunnanJäsen = (n \ "YlioppilaskuntaJasen").headOption.map(toBoolean),
-          ythsMaksettu = (n \ "YTHSMaksu").headOption.map(toBoolean)
-        )
+  private def lukukausiIlmoittautuminen(opiskeluoikeus: KorkeakoulunOpiskeluoikeus, virtaXml: Node): Option[Lukukausi_Ilmoittautuminen] = {
+    val kuuluuOpiskeluoikeuteen = aktiivisetOpiskeluoikeuteenKuuluvat(opiskeluoikeus)
+    val ilmot = (virtaXml \\ "LukukausiIlmoittautuminen").toList
+      .map(lukukausiIlmoittautuminen)
+      .filter(kuuluuOpiskeluoikeuteen)
+      .sortBy(_.alku)(DateOrdering.localDateOrdering.reverse)
+
+    optionalList(ilmot).map(Lukukausi_Ilmoittautuminen)
+  }
+
+  private def aktiivisetOpiskeluoikeuteenKuuluvat(opiskeluoikeus: KorkeakoulunOpiskeluoikeus) = {
+    val jaksot = opiskeluoikeus.tila.opiskeluoikeusjaksot
+    val aktiivisetJaksot: List[(LocalDate, LocalDate)] = jaksot.zip(jaksot.drop(1)).collect { case (a, b) if a.tila.koodiarvo == "1" =>
+      (a.alku, b.alku)
+    }
+
+    (ilmoittautuminen: Lukukausi_Ilmoittautumisjakso) => {
+      val oppilaitosNumero = opiskeluoikeus.oppilaitos.flatMap(_.oppilaitosnumero.map(_.koodiarvo))
+      val kuuluuOpiskeluoikeudenOppilaitokseen = oppilaitosNumero.exists { oppilaitos =>
+        ilmoittautuminen.myöntäjä.flatMap(_.oppilaitosnumero.map(_.koodiarvo)).contains(oppilaitos)
       }
-    optionalList(ilmot)
+
+      val osuuAktiiviseenJaksoon = aktiivisetJaksot.exists { case (alku, loppu) =>
+        (alku.isEqual(ilmoittautuminen.alku) || alku.isBefore(ilmoittautuminen.alku)) &&
+        (loppu.isEqual(ilmoittautuminen.alku) || loppu.isAfter(ilmoittautuminen.alku))
+      }
+
+      kuuluuOpiskeluoikeudenOppilaitokseen && osuuAktiiviseenJaksoon
+    }
+  }
+
+  private def lukukausiIlmoittautuminen(n: Node) = {
+    Lukukausi_Ilmoittautumisjakso(
+      alku = alkuPvm(n),
+      loppu = loppuPvm(n),
+      tila = koodistoViitePalvelu.validate(Koodistokoodiviite((n \ "Tila").text, "virtalukukausiilmtila")).getOrElse(lukukausiIlmottautuminenPuuttuu),
+      myöntäjä = optionalOppilaitos(n),
+      ylioppilaskunnanJäsen = (n \ "YlioppilaskuntaJasen").headOption.map(toBoolean),
+      ythsMaksettu = (n \ "YTHSMaksu").headOption.map(toBoolean)
+    )
   }
 
   private val virtaTruths = List("1", "true")

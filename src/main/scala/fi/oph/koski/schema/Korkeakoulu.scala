@@ -5,7 +5,7 @@ import java.time.LocalDate
 import fi.oph.koski.localization.LocalizedString
 import fi.oph.koski.localization.LocalizedString._
 import fi.oph.koski.localization.LocalizedStringImplicits._
-import fi.oph.koski.schema.annotation.{FlattenInUI, KoodistoKoodiarvo, KoodistoUri}
+import fi.oph.koski.schema.annotation._
 import fi.oph.scalaschema.annotation.{Description, Title}
 
 case class KorkeakoulunOpiskeluoikeus(
@@ -22,7 +22,7 @@ case class KorkeakoulunOpiskeluoikeus(
   @KoodistoKoodiarvo("korkeakoulutus")
   tyyppi: Koodistokoodiviite = Koodistokoodiviite("korkeakoulutus", Some("Korkeakoulutus"), "opiskeluoikeudentyyppi", None),
   synteettinen: Boolean = false,
-  lukukausiIlmoittautumiset: Option[List[KorkeakoulunLukukausi_Ilmoittautuminen]] = None
+  lukukausiIlmoittautuminen: Option[Lukukausi_Ilmoittautuminen] = None
 ) extends Opiskeluoikeus {
   override def versionumero = None
   override def lisätiedot = None
@@ -138,13 +138,17 @@ case class KorkeakoulunPaikallinenArviointi(
   override def arvioitsijat: Option[List[Arvioitsija]] = None
 }
 
-case class KorkeakoulunLukukausi_Ilmoittautuminen(
+case class Lukukausi_Ilmoittautuminen(
+  ilmoittautumisjaksot: List[Lukukausi_Ilmoittautumisjakso]
+)
+
+case class Lukukausi_Ilmoittautumisjakso(
+  alku: LocalDate,
+  loppu: Option[LocalDate],
   @KoodistoUri("virtalukukausiilmtila")
   tila: Koodistokoodiviite,
+  @Hidden
   myöntäjä: Option[Oppilaitos],
-  ilmoittautumispäivä: LocalDate,
-  alkamispäivä: LocalDate,
-  päättymispäivä: Option[LocalDate],
-  ylioppilaskunnanJäsen: Option[Boolean],
-  ythsMaksettu: Option[Boolean]
+  ylioppilaskunnanJäsen: Option[Boolean] = None,
+  ythsMaksettu: Option[Boolean] = None
 )
