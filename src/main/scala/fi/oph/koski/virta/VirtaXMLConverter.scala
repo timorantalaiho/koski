@@ -147,9 +147,10 @@ case class VirtaXMLConverter(oppilaitosRepository: OppilaitosRepository, koodist
   }
 
   private def aktiivisetOpiskeluoikeuteenKuuluvat(opiskeluoikeus: KorkeakoulunOpiskeluoikeus) = {
-    val jaksot = opiskeluoikeus.tila.opiskeluoikeusjaksot
-    val aktiivisetJaksot: List[(LocalDate, LocalDate)] = jaksot.zip(jaksot.drop(1)).collect { case (a, b) if a.tila.koodiarvo == "1" =>
-      (a.alku, b.alku)
+    val jaksot = opiskeluoikeus.tila.opiskeluoikeusjaksot.map(Some.apply)
+    val kaikkiJaksot: List[(Option[KorkeakoulunOpiskeluoikeusjakso], Option[KorkeakoulunOpiskeluoikeusjakso])] = jaksot.zipAll(jaksot.drop(1), None, None)
+    val aktiivisetJaksot: List[(LocalDate, Option[LocalDate])] = kaikkiJaksot.collect {
+      case (Some(a), b) if a.tila.koodiarvo == "1" => (a.alku, b.map(_.alku))
     }
 
     (ilmoittautuminen: Lukukausi_Ilmoittautumisjakso) => {
@@ -160,7 +161,7 @@ case class VirtaXMLConverter(oppilaitosRepository: OppilaitosRepository, koodist
 
       val osuuAktiiviseenJaksoon = aktiivisetJaksot.exists { case (alku, loppu) =>
         (alku.isEqual(ilmoittautuminen.alku) || alku.isBefore(ilmoittautuminen.alku)) &&
-        (loppu.isEqual(ilmoittautuminen.alku) || loppu.isAfter(ilmoittautuminen.alku))
+         loppu.forall(l => l.isEqual(ilmoittautuminen.alku) || l.isAfter(ilmoittautuminen.alku))
       }
 
       kuuluuOpiskeluoikeudenOppilaitokseen && osuuAktiiviseenJaksoon
